@@ -80,13 +80,14 @@ if __name__ == '__main__':
 
     summary_path = experiment_dir.joinpath('summaries', 'summary.json')
     batch_size = 64 if num_gpus else 256
+    input_size = (224, 224, 3) if num_gpus else None
     is_corruption = False
-    train_emg_gen = EmgImageGenerator(train_path, batch_size)
-    callback_train_emg_gen = EmgImageGenerator(train_path, batch_size)
-    callback_val_emg_gen = EmgImageGenerator(val_path, batch_size)
+    train_emg_gen = EmgImageGenerator(train_path, batch_size, input_size=input_size[0])
+    callback_train_emg_gen = EmgImageGenerator(train_path, batch_size, input_size=input_size[0])
+    callback_val_emg_gen = EmgImageGenerator(val_path, batch_size, input_size=input_size[0])
 
 
-    model = get_model(activation=activation, initial_weights=initial_weights)
+    model = get_model(activation=activation, initial_weights=initial_weights, input_size=input_size)
     if is_corruption:
         loss = numpy_bce
         p = ClassificationCallback(callback_train_emg_gen, callback_val_emg_gen, summary_path, loss)

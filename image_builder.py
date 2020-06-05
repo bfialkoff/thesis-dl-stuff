@@ -50,8 +50,9 @@ def permute_axes_subtract(arr, axis=1):
     return arr.reshape(s1) - arr.reshape(s2)
 
 class EmgImageGenerator:
-    def __init__(self, csv_path, batch_size, is_debug=False):
+    def __init__(self, csv_path, batch_size, input_size=None, is_debug=False):
         self.is_debug = is_debug
+        self.input_size = input_size
         self.input_columns = [f'channel_{c}' for c in range(8)]
         self.output_column = 'force'
         annotation = pd.read_csv(csv_path)
@@ -74,7 +75,7 @@ class EmgImageGenerator:
         return aug
 
     def scale_rows(self, df):
-        self.min_max_scaler = MinMaxScaler(feature_range=(-1, 1))
+        self.min_max_scaler = MinMaxScaler(feature_range=(0, 1))
         self.min_max_scaler.fit(df[self.output_column].values.reshape(-1, 1))  # transforms the outputs to a normal distribution
         #self.max_abs_scaler = MaxAbsScaler()
         df[self.output_column] = self.min_max_scaler.transform(df[self.output_column].values.reshape(-1, 1)) # transforms the outputs to a normal distribution
@@ -95,6 +96,13 @@ class EmgImageGenerator:
         normalized_batch = batch_images / batch_maxes
         return normalized_batch
 
+    def resize_batch(self, batch_images):
+        dst_batch = np.zeros((len(batch_images), self.input_size, self.input_size, 3), dtype=batch_images.dtype)
+        for i, img in enumerate(batch_images):
+            resized = cv2.resize(img, (self.input_size, self.input_size), cv2.INTER_NEAREST)
+            dst_batch[i] = resized
+        return dst_batch
+
     def get_input_outputs(self, batch_rows, debug_tag=''):
         inputs, outputs = batch_rows[self.input_columns].values, batch_rows[self.output_column].values
         input_images = permute_axes_subtract(inputs)
@@ -102,6 +110,8 @@ class EmgImageGenerator:
         input_images = self.transform_func(input_images)
         input_images = input_images.reshape(-1, 8, 8)
         input_images = np.repeat(input_images[:, :, :, np.newaxis], 3, axis=3)
+        if self.input_size:
+            input_images = self.resize_batch(input_images)
         if self.is_debug:
             self.save_image(input_images, debug_tag)
         return input_images, outputs
