@@ -12,9 +12,42 @@ from albumentations import (
     IAASharpen, IAAEmboss, OneOf, Compose
 )
 
-from core.utils.gauss_rank_scaler import GaussRankScaler
-from core.utils.array import permute_axes_subtract
 
+def permute_axes_subtract(arr, axis=1):
+    """
+            calculates all the differences between all combinations
+            terms in the input array. output[i,j] = arr[i] - arr[j]
+            for every combination if ij.
+
+            Parameters
+            ----------
+            arr numpy.array
+                a 1d input array
+
+            Returns
+            -------
+            numpy.array
+                a 2d array
+
+            Examples
+            --------
+            arr = [10, 11, 12]
+
+            diffs = [[ 0 -1 -2]
+                    [ 1  0 -1]
+                    [ 2  1  0]]
+            """
+    s = arr.shape
+    if arr.ndim == 1:
+        axis = 0
+
+    # Get broadcastable shapes by introducing singleton dimensions
+    s1 = np.insert(s, axis, 1)
+    s2 = np.insert(s, axis + 1, 1)
+
+    # Perform subtraction after reshaping input array to
+    # broadcastable ones against each other
+    return arr.reshape(s1) - arr.reshape(s2)
 
 class EmgImageGenerator:
     def __init__(self, csv_path, batch_size, is_debug=False):
@@ -41,7 +74,6 @@ class EmgImageGenerator:
         return aug
 
     def scale_rows(self, df):
-        self.gauss_scaler = GaussRankScaler()
         self.min_max_scaler = MinMaxScaler(feature_range=(-1, 1))
         self.min_max_scaler.fit(df[self.output_column].values.reshape(-1, 1))  # transforms the outputs to a normal distribution
         #self.max_abs_scaler = MaxAbsScaler()

@@ -1,1 +1,5 @@
 files/
+.idea/
+Pipfile
+__pycache__/
+
