@@ -11,6 +11,7 @@ from random import shuffle, sample
 import cv2
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, MaxAbsScaler
+from scipy.ndimage import convolve
 import pandas as pd
 from sklearn.utils import shuffle as sk_shuffle
 from albumentations import (
@@ -82,17 +83,40 @@ class EmgImageGenerator:
         self.input_shape = (self.num_channels, self.num_channels, self.num_imfs)
         self.output_column = 'force'
         self.scaler = scaler
-        self.annotations = annotations
-        if self.scaler:
-            self.annotations[self.output_column] = \
-                self.scaler.transform(self.annotations[self.output_column].values.reshape(-1, 1))
+        self.input_images, self.outputs = self.process_annotations(annotations)
         self.batch_size = batch_size
-        self.num_samples = len(annotations)
+        self.num_samples = len(self.outputs)
         self.steps = self.num_samples // self.batch_size
         self.index_list = list(range(self.num_samples))
         self.corrupter = self.get_corrupter()
         shuffle(self.index_list)
 
+    def process_annotations(self, raw_annotations):
+        kernel_length = 201
+        #rms_kernel_3d = (np.ones((kernel_length, self.num_channels, self.num_channels))/(self.num_channels * self.num_channels)) / kernel_length
+        rms_kernel_3d = np.ones(kernel_length) / kernel_length
+        after_rms_size = len(raw_annotations) + kernel_length - 1
+        batch_images, batch_outputs = np.zeros((after_rms_size, *self.input_shape)), np.zeros(after_rms_size)
+        batch_outputs = np.convolve(raw_annotations[self.output_column], rms_kernel_3d)
+        if self.scaler:
+            batch_outputs = self.scaler.transform(batch_outputs.reshape(-1, 1)).reshape(-1)
+
+        for i, (imf, channel_cols) in enumerate(self.imf_cols_dict.items()):
+            inputs = raw_annotations[channel_cols].values
+            # this row makes the voltage difference proportional to the channel (ai-aj) * ai
+            # input_images = input_images * np.expand_dims(batch_rows[channel_cols], 2)
+            input_images = permute_axes_subtract(inputs)
+            for r in range(self.num_channels):
+                for c in range(self.num_channels):
+                    if r != c: # on the diagonal the entire value is zero, no need to waste computation
+                        curr_signal = input_images[:, r, c]
+                        curr_res = np.convolve(curr_signal, rms_kernel_3d)
+                        batch_images[:, r, c, i] = curr_res
+                    else:
+                        batch_images[:, r, c, i] = 0
+
+
+        return batch_images, batch_outputs
 
     def get_corrupter(self):
         distortion_augs = OneOf([OpticalDistortion(p=1), GridDistortion(p=1)], p=1)
@@ -138,11 +162,12 @@ class EmgImageGenerator:
             # input_images = input_images * np.expand_dims(batch_rows[channel_cols], 2)
             input_images = input_images.reshape(-1, self.num_channels, self.num_channels)
             batch_images[:, :, :, i] = input_images
+        print('done')
         if self.input_size:
             self.resize_batch(batch_images)
         if self.is_debug:
             self.save_image(batch_images, debug_tag)
-        return batch_images, batch_outputs
+        return batch_images, batch_outputs,
 
     def save_image(self, images, debug_tag=''):
         images = images[:,:,:, 0:3]
@@ -215,8 +240,7 @@ class EmgImageGenerator:
                 shuffle(self.index_list)
                 counter = 0
             batch_indices = sample(self.index_list, self.batch_size)
-            batch_rows = self.annotations.iloc[batch_indices]
-            input_images, outputs = self.get_input_outputs(batch_rows)
+            input_images, outputs = self.input_images[batch_indices], self.outputs[batch_indices]
             yield input_images, outputs
 
     def val_generator(self):
@@ -232,8 +256,7 @@ class EmgImageGenerator:
                 start_i = counter * self.batch_size
                 end_i = start_i + self.batch_size
             counter += 1
-            batch_rows = self.annotations.iloc[start_i:end_i]
-            input_images, outputs = self.get_input_outputs(batch_rows)
+            input_images, outputs = self.input_images[start_i:end_i], self.outputs[start_i:end_i]
             yield input_images, outputs
 
 
@@ -248,15 +271,13 @@ def show_2_images(img1, img2):
 if __name__ == '__main__':
     from pathlib import Path
 
-    train_path = Path(__file__, '..', 'files', 'emd_dl_train_annotations.csv').resolve()
-    val_path = Path(__file__, '..', 'files', 'emd_dl_val_annotations.csv').resolve()
-    annotations = pd.read_csv(train_path)
-    print(annotations['subject'].unique())
-    annotations = pd.read_csv(val_path)
-    print(annotations['subject'].unique())
-    from sys import exit
-    exit()
-    train_emg_gen = EmgImageGenerator(train_path, 16, num_imfs=4, is_debug=True)
-    val_emg_gen = EmgImageGenerator(val_path, 16, num_imfs=4, is_debug=True)
+    train_path = Path(__file__, '..', '..', '..', 'files', 'emd_dl_train_annotations.csv').resolve()
+    val_path = Path(__file__, '..', '..', '..', 'files', 'emd_dl_val_annotations.csv').resolve()
+    train_annotations = pd.read_csv(train_path)
+    print(train_annotations['subject'].unique())
+    val_annotations = pd.read_csv(val_path)
+    print(val_annotations['subject'].unique())
+    train_emg_gen = EmgImageGenerator(train_annotations, 16, num_imfs=4, is_debug=True)
+    val_emg_gen = EmgImageGenerator(val_annotations, 16, num_imfs=4, is_debug=True)
     for i, d in train_emg_gen.train_generator():
-        pass
+        print(i)
