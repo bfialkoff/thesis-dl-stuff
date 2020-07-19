@@ -90,20 +90,20 @@ class ClassificationCallback(Callback):
         summary = self.load_summary(self.summary_path)
         summary.update({f'{key:02d}': update})
         self.save_summary(summary)
+
     @classmethod
     def get_gridspec(cls):
         fig10 = plt.figure(constrained_layout=True)
         gs0 = fig10.add_gridspec(1, 2)
 
         loss_gs = gs0[0].subgridspec(1, 1)
-        metric_gs = gs0[1].subgridspec(1, 1)
+        metric_gs = gs0[1].subgridspec(2, 2)
         fig10.add_subplot(loss_gs[0])
 
-        g_spec = metric_gs[0].subgridspec(2, 2)
-        for dset in range(2):
+        for dataset in range(2):
             for irow_metric in range(2):
                 for jrow_metric in range(2):
-                    fig10.add_subplot(g_spec[irow_metric, jrow_metric])
+                    fig10.add_subplot(metric_gs[irow_metric, jrow_metric])
         return fig10.axes
 
     def write_graph(self, train_color='r', val_color='g'):
@@ -195,7 +195,8 @@ if __name__ == '__main__':
     from pathlib import Path
     from datetime import datetime
 
-    ClassificationCallback.get_gridspec()
+    a = ClassificationCallback.get_gridspec()
+    plt.show()
     from sys import exit
     exit()
     train_path = Path(__file__, '..', 'files', 'dl_train_annotations.csv')

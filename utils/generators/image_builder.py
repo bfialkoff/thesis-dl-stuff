@@ -12,7 +12,6 @@ from albumentations import (
     IAASharpen, IAAEmboss, OneOf, Compose
 )
 
-
 def permute_axes_subtract(arr, axis=1):
     """
             calculates all the differences between all combinations
@@ -42,17 +41,18 @@ def permute_axes_subtract(arr, axis=1):
         axis = 0
 
     # Get broadcastable shapes by introducing singleton dimensions
-    s1 = np.insert(s, axis, 1)
-    s2 = np.insert(s, axis + 1, 1)
+    s1 = np.insert(s, axis + 1, 1)
+    s2 = np.insert(s, axis, 1)
 
     # Perform subtraction after reshaping input array to
     # broadcastable ones against each other
     return arr.reshape(s1) - arr.reshape(s2)
 
+
 class EmgImageGenerator:
     def __init__(self, csv_path, batch_size, input_size=None, is_debug=False):
-        self.is_debug = is_debug
         self.input_size = input_size
+        self.is_debug = is_debug
         self.input_columns = [f'channel_{c}' for c in range(8)]
         self.output_column = 'force'
         annotation = pd.read_csv(csv_path)
@@ -77,10 +77,7 @@ class EmgImageGenerator:
     def scale_rows(self, df):
         self.min_max_scaler = MinMaxScaler(feature_range=(0, 1))
         self.min_max_scaler.fit(df[self.output_column].values.reshape(-1, 1))  # transforms the outputs to a normal distribution
-        #self.max_abs_scaler = MaxAbsScaler()
         df[self.output_column] = self.min_max_scaler.transform(df[self.output_column].values.reshape(-1, 1)) # transforms the outputs to a normal distribution
-        #df[self.output_column] = self.max_abs_scaler.fit_transform(df[self.output_column].values.reshape(-1, 1))  # transforms the outputs to a normal distribution
-        # df[self.input_columns] = self.gauss_scaler.fit_transform(df[self.input_columns])
         return df
 
     def corrupt(self, batch_images):
@@ -97,21 +94,23 @@ class EmgImageGenerator:
         return normalized_batch
 
     def resize_batch(self, batch_images):
-        dst_batch = np.zeros((len(batch_images), self.input_size, self.input_size, 3), dtype=batch_images.dtype)
+        dst = np.array((len(batch_images), self.input_size, self.input_size, 3), dtype=batch_images.dtype)
         for i, img in enumerate(batch_images):
             resized = cv2.resize(img, (self.input_size, self.input_size), cv2.INTER_NEAREST)
-            dst_batch[i] = resized
-        return dst_batch
+            dst[i] = resized
+        return dst
 
     def get_input_outputs(self, batch_rows, debug_tag=''):
         inputs, outputs = batch_rows[self.input_columns].values, batch_rows[self.output_column].values
         input_images = permute_axes_subtract(inputs)
-        # input_images = self.max_abs_scaler.fit_transform(input_images.reshape(-1, self.batch_size))
+
+        # this row makes the voltage difference relative to the channel (ai-aj) * ai
+        input_images = input_images * np.expand_dims(batch_rows[self.input_columns], 2)
         input_images = self.transform_func(input_images)
         input_images = input_images.reshape(-1, 8, 8)
         input_images = np.repeat(input_images[:, :, :, np.newaxis], 3, axis=3)
         if self.input_size:
-            input_images = self.resize_batch(input_images)
+            self.resize_batch(input_images)
         if self.is_debug:
             self.save_image(input_images, debug_tag)
         return input_images, outputs
@@ -221,5 +220,5 @@ if __name__ == '__main__':
     train_path = Path(__file__, '..', 'files', 'dl_train_annotations.csv')
     val_path = Path(__file__, '..', 'files', 'dl_val_annotations.csv')
     emg_gen = EmgImageGenerator(train_path, 16, is_debug=True)
-    for i, d in emg_gen.train_generator():
+    for i, d in emg_gen.test_train_generator():
         print(len(d))

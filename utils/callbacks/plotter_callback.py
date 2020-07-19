@@ -8,7 +8,7 @@ import os
 import json
 
 import matplotlib
-matplotlib.use('Agg')
+#matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from keras.callbacks import Callback
 import numpy as np
@@ -77,7 +77,33 @@ class PlotterCallback(Callback):
         summary.update({f'{key:02d}': update})
         self.save_summary(summary)
 
+    def get_losses(self):
+        summary = self.load_summary(self.summary_path)
+        num_epochs = len(summary)
+        epochs, train_loss, val_loss = np.zeros(num_epochs), np.zeros(num_epochs), np.zeros(num_epochs)
+        for i, (epoch, v) in enumerate(summary.items()):
+            epochs[i] = int(epoch)
+            train_loss[i] = v['train_loss']
+            val_loss[i] = v['val_loss']
+        sorted_inds = epochs.argsort()
+        epochs = epochs[sorted_inds]
+        train_loss = train_loss[sorted_inds]
+        val_loss = val_loss[sorted_inds]
+        return epochs, train_loss, val_loss
+
+
+
     def write_graph(self, epoch, train_labels, train_predictions, val_labels, val_predictions):
+        loss_ax, train_ax, val_ax = self.get_gridspec()
+        ax_lim = [-0.9 ,1.2]
+        train_ax.set_ylim(ax_lim)
+        val_ax.set_ylim(ax_lim)
+        loss_ax.set_title('loss')
+        train_ax.set_title('train')
+        val_ax.set_title('val')
+
+        epochs, train_loss, val_loss = self.get_losses()
+
         train_inds = train_labels.argsort()
         val_inds = val_labels.argsort()
         train_labels = train_labels[train_inds]
@@ -86,14 +112,34 @@ class PlotterCallback(Callback):
         val_labels = val_labels[val_inds]
         val_predictions = val_predictions[val_inds]
 
-        f, (ax1, ax2) = plt.subplots(1, 2)
-        ax1.plot(train_labels, 'g')
-        ax1.plot(train_predictions, 'r')
-        ax2.plot(val_labels, 'g')
-        ax2.plot(val_predictions, 'r')
+        loss_ax.plot(epochs, train_loss, 'g', label='train')
+        loss_ax.plot(epochs, val_loss, 'r', label='val')
+
+        train_ax.plot(train_labels, 'g', label='label')
+        train_ax.plot(train_predictions, 'r', alpha=0.2, label='prediction')
+        val_ax.plot(val_labels, 'g', label='label')
+        val_ax.plot(val_predictions, 'r', alpha=0.2, label='prediction')
+
+        train_ax.legend()
+        val_ax.legend()
+        loss_ax.legend()
         plt.savefig(self.graph_path.joinpath(f'epoch_{epoch}.png').resolve())
         plt.close()
 
+    @classmethod
+    def get_gridspec(cls):
+        fig10 = plt.figure(constrained_layout=True)
+        gs0 = fig10.add_gridspec(1, 2)
+
+        loss_gs = gs0[0].subgridspec(1, 1)
+        graphs_gs = gs0[1].subgridspec(2, 1)
+        fig10.add_subplot(loss_gs[0])
+
+        for dataset in range(2):
+            for irow_metric in range(2):
+                for jrow_metric in range(1):
+                    fig10.add_subplot(graphs_gs[irow_metric, jrow_metric])
+        return fig10.axes
 
     def run(self, gen_obj):
         y_true = np.zeros(gen_obj.steps * gen_obj.batch_size)
@@ -133,6 +179,15 @@ class PlotterCallback(Callback):
             ax2.cla()
 
 if __name__ == '__main__':
+    from sys import exit
+
+    loss_ax, train_ax, val_ax = PlotterCallback.get_gridspec()
+    train_ax.set_title('train_ax')
+    val_ax.set_title('val_ax')
+    loss_ax.set_title('loss_ax')
+    plt.show()
+    exit()
+
     from image_builder import EmgImageGenerator
     from pathlib import Path
     from datetime import datetime
