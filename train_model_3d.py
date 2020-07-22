@@ -2,8 +2,7 @@ from pathlib import Path
 from datetime import datetime
 import keras
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, Flatten, Input
-from keras.layers import Conv2D, MaxPooling2D, BatchNormalization
+from keras.layers import Dense, Dropout, Flatten, BatchNormalization, Conv3D, MaxPooling3D
 from keras.callbacks import ModelCheckpoint
 from keras import Model
 from keras.utils.multi_gpu_utils import multi_gpu_model
@@ -12,86 +11,48 @@ from keras import backend as K
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, MaxAbsScaler
 import pandas as pd
 
+from utils.resnet3d import Resnet3DBuilder
 from utils.callbacks.plotter_callback import PlotterCallback
 from utils.callbacks.classification_callback import ClassificationCallback
-from utils.generators.new_image_builder import EmgImageGenerator, permute_axes_subtract
+from utils.generators.sequential_emg_generator import EmgImageGenerator
 from utils.losses.numpy_losses import *
 from utils.preprocessing.data_preprocessor import DataPreprocessor
 
 num_imfs = 4
+window_sample_length = 256
 
 
-def get_gpu_model(input_size=None, activation=None, initial_weights=None, is_corruption=False):
-    ResNet50v2, preprocess_input = Classifiers.get('resnet50v2')
-    model = ResNet50v2(input_shape=input_size, weights='imagenet', classes=1, include_top=False, pooling='avg')
-    model_inputs = model.inputs
-    model_outsputs = model.output
-    model_outsputs = Dense(128, activation='relu')(model_outsputs)
-    model_outsputs = Dense(32, activation='relu')(model_outsputs)
-    model_outsputs = Dense(1, activation=activation)(model_outsputs)
-    model = Model(model_inputs, model_outsputs)
-    model = multi_gpu_model(model, gpus=2)
-    model.compile(loss=keras.losses.mean_squared_error,
-                  optimizer=keras.optimizers.Adam()
-                  )
-    return model
 
-def get_cpu_model_no_overfit(input_size=None, activation=None, initial_weights=None, is_corruption=False):
+def _get_cpu_model(input_size=None, activation=None, initial_weights=None, is_corruption=False):
     model = Sequential()
-    model.add(Conv2D(16, kernel_size=(3, 3), activation='relu', input_shape=(8, 8, num_imfs)))
-    model.add(Conv2D(4, (3, 3), activation='relu'))
+
+    model.add(
+        Conv3D(32, kernel_size=(32, 3, 3), activation='relu', input_shape=(window_sample_length, 8, 8, num_imfs)))
+    model.add(Conv3D(16, (16,3,3), padding='Same', activation='relu'))
+    # model.add(BatchNormalization())
+    model.add(MaxPooling3D())
+    # model.add(Dropout(0.25))
+
+    model.add(Conv3D(32, (16,3,3), padding='Same', activation='relu'))
+    model.add(Conv3D(64, (8,3,3), padding='Same', activation='relu'))
+    #model.add(BatchNormalization())
+    model.add(MaxPooling3D())
     #model.add(Dropout(0.25))
+
     model.add(Flatten())
-    model.add(Dense(64, activation='relu'))
-    model.add(Dense(32, activation='relu'))
-    model.add(Dense(16, activation='relu'))
-    model.add(Dense(8, activation='relu'))
+
+    model.add(Dense(4096, activation='relu'))
     #model.add(Dropout(0.5))
-    model.add(Dense(1, activation=keras.activations.selu))
-    if is_corruption:
-        loss = keras.losses.binary_crossentropy
-    else:
-        loss = keras.losses.mean_squared_error
-    model.compile(loss=loss,
-                  optimizer=keras.optimizers.Adam(1e-3)
-                  )
-    if initial_weights:
-        model.load_weights(initial_weights)
-    return model
 
-def __get_cpu_model(input_size=None, activation=None, initial_weights=None, is_corruption=False):
-    model = Sequential()
-    model.add(Conv2D(16, kernel_size=(3, 3), activation='relu', input_shape=(8, 8, num_imfs), padding='same'))
-    model.add(Conv2D(8, (3, 3), activation='relu', padding='same'))
-    model.add(Conv2D(4, (3, 3), activation='relu', padding='same'))
-    model.add(Dropout(0.25))
-    model.add(Flatten())
-    model.add(Dense(8, activation='relu'))
-    model.add(Dropout(0.25))
-    model.add(Dense(1, activation=None)) # , bias_initializer=0.5
-    if is_corruption:
-        loss = keras.losses.binary_crossentropy
-    else:
-        loss = keras.losses.mean_squared_error
-    model.compile(loss=loss,
-                  optimizer=keras.optimizers.SGD(1e-5)
-                  )
-    if initial_weights:
-        model.load_weights(initial_weights)
-    return model
+    model.add(Dense(1024, activation='relu'))
+    #model.add(Dropout(0.5))
 
-def get_cpu_model(input_size=None, activation=None, initial_weights=None, is_corruption=False):
-    model = Sequential()
-    #model.add(Conv2D(16, kernel_size=(6, 6), activation='relu', input_shape=(8, 8, num_imfs), padding='same'))
-    #model.add(Conv2D(4, (4, 4), activation='relu', padding='same'))
-    model.add(Flatten(input_shape=(8, 8, num_imfs)))
-    model.add(Dense(512, activation='relu'))
     model.add(Dense(256, activation='relu'))
-    model.add(Dense(128, activation='relu'))
+    #model.add(Dropout(0.5))
+
     model.add(Dense(64, activation='relu'))
-    model.add(Dense(32, activation='relu'))
-    model.add(Dense(16, activation='relu'))
-    model.add(Dense(8, activation='relu'))
+    #model.add(Dropout(0.5))
+
     model.add(Dense(1, activation=None))
     if is_corruption:
         loss = keras.losses.binary_crossentropy
@@ -100,15 +61,30 @@ def get_cpu_model(input_size=None, activation=None, initial_weights=None, is_cor
         loss = keras.losses.mean_squared_error
         print('mse')
     model.compile(loss=loss,
-                  optimizer=keras.optimizers.Adam(1e-4)
+                  optimizer=keras.optimizers.SGD(1e-5)
                   )
     if initial_weights:
         model.load_weights(initial_weights)
     return model
 
+def get_cpu_model(input_size=None, activation=None, initial_weights=None, is_corruption=False):
+    input_shape = (window_sample_length, 8, 8, num_imfs)
+    model = Resnet3DBuilder.build_resnet_50((window_sample_length, 8, 8, num_imfs), 1)
+    if is_corruption:
+        loss = keras.losses.binary_crossentropy
+        print('bce')
+    else:
+        loss = keras.losses.mean_squared_error
+        print('mse')
+    model.compile(loss=loss,
+                  optimizer=keras.optimizers.SGD(1e-5)
+                  )
+    if initial_weights:
+        model.load_weights(initial_weights)
+    return model
 
 num_gpus = len(K.tensorflow_backend._get_available_gpus())
-get_model = get_gpu_model if num_gpus else get_cpu_model
+get_model = get_cpu_model
 
 def get_model_checkpoint(experiment_dir):
     weights_path = experiment_dir.joinpath('weights', '{epoch:02d}.hdf5')
@@ -139,7 +115,7 @@ if __name__ == '__main__':
     activation = None
 
     summary_path = experiment_dir.joinpath('summaries', 'summary.json')
-    batch_size = 64 if num_gpus else 256
+    batch_size = 16
     input_size = (224, 224, 3) if num_gpus else [None]
     is_corruption = False
 

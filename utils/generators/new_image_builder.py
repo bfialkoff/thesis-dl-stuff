@@ -88,19 +88,44 @@ class EmgImageGenerator:
         self.num_samples = len(self.outputs)
         self.steps = self.num_samples // self.batch_size
         self.index_list = list(range(self.num_samples))
-        self.corrupter = self.get_corrupter()
         shuffle(self.index_list)
 
+    # all this is unnecessary rms is a linear filter,
+    # i could have left it as was, rms the df on __init__
+    # and then permute_axes_subtract per batch
     def process_annotations(self, raw_annotations):
         kernel_length = 201
-        #rms_kernel_3d = (np.ones((kernel_length, self.num_channels, self.num_channels))/(self.num_channels * self.num_channels)) / kernel_length
         rms_kernel_3d = np.ones(kernel_length) / kernel_length
-        after_rms_size = len(raw_annotations) + kernel_length - 1
+        grouped_annotations = raw_annotations.groupby(['subject', 'signal_num'])
+        # the proper length len(grouped_annotations)*(kernel_length - 1) + len(raw_annotations)
+        after_rms_size = len(grouped_annotations)*(kernel_length - 1) + len(raw_annotations)
         batch_images, batch_outputs = np.zeros((after_rms_size, *self.input_shape)), np.zeros(after_rms_size)
-        batch_outputs = np.convolve(raw_annotations[self.output_column], rms_kernel_3d)
-        if self.scaler:
-            batch_outputs = self.scaler.transform(batch_outputs.reshape(-1, 1)).reshape(-1)
 
+
+        end_index = 0
+        #total_len = 0
+        for counter, (groupby_index, df) in enumerate(grouped_annotations):
+            force_res = np.convolve(df[self.output_column], rms_kernel_3d)
+            #total_len += len(force_res)
+            start_index = end_index
+            end_index = start_index + len(force_res)
+            batch_outputs[start_index:end_index] = force_res
+            for i, (imf, channel_cols) in enumerate(self.imf_cols_dict.items()):
+                inputs = df[channel_cols].values
+                # this row makes the voltage difference proportional to the channel (ai-aj) * ai
+                # input_images = input_images * np.expand_dims(batch_rows[channel_cols], 2)
+                input_images = permute_axes_subtract(inputs)
+                for r in range(self.num_channels):
+                    for c in range(self.num_channels):
+                        if r != c:  # on the diagonal the entire value is zero, no need to waste computation
+                            curr_signal = input_images[:, r, c]
+                            curr_res = np.convolve(curr_signal, rms_kernel_3d)
+                            batch_images[start_index:end_index, r, c, i] = curr_res
+                        else:
+                            batch_images[start_index:end_index, r, c, i] = 0
+        #print(total_len, len(raw_annotations))
+        """
+        batch_outputs = np.convolve(raw_annotations[self.output_column], rms_kernel_3d)
         for i, (imf, channel_cols) in enumerate(self.imf_cols_dict.items()):
             inputs = raw_annotations[channel_cols].values
             # this row makes the voltage difference proportional to the channel (ai-aj) * ai
@@ -114,7 +139,12 @@ class EmgImageGenerator:
                         batch_images[:, r, c, i] = curr_res
                     else:
                         batch_images[:, r, c, i] = 0
-
+        
+        """
+        if self.scaler is None:
+            self.scaler = MinMaxScaler(feature_range=(0, 1))
+            self.scaler.fit(batch_outputs.reshape(-1, 1))
+        batch_outputs = self.scaler.transform(batch_outputs.reshape(-1, 1)).reshape(-1)
 
         return batch_images, batch_outputs
 
@@ -156,13 +186,10 @@ class EmgImageGenerator:
             inputs = batch_rows[channel_cols].values
             input_images = permute_axes_subtract(inputs)
 
-            # todo experimenting with t-diemnsional rms here
-
             # this row makes the voltage difference proportional to the channel (ai-aj) * ai
             # input_images = input_images * np.expand_dims(batch_rows[channel_cols], 2)
             input_images = input_images.reshape(-1, self.num_channels, self.num_channels)
             batch_images[:, :, :, i] = input_images
-        print('done')
         if self.input_size:
             self.resize_batch(batch_images)
         if self.is_debug:
@@ -171,7 +198,7 @@ class EmgImageGenerator:
 
     def save_image(self, images, debug_tag=''):
         images = images[:,:,:, 0:3]
-        debug_dir = Path(__file__).joinpath('..', 'files', 'deep_learning', 'debug').resolve()
+        debug_dir = Path(__file__).joinpath('..', '..', '..', 'files', 'deep_learning', 'debug').resolve()
         if not debug_dir.exists():
             debug_dir.mkdir(parents=True)
         last_i = len(list(debug_dir.glob('*'))) + 1
@@ -241,6 +268,8 @@ class EmgImageGenerator:
                 counter = 0
             batch_indices = sample(self.index_list, self.batch_size)
             input_images, outputs = self.input_images[batch_indices], self.outputs[batch_indices]
+            if self.is_debug:
+                self.save_image(input_images, debug_tag='')
             yield input_images, outputs
 
     def val_generator(self):
@@ -277,7 +306,8 @@ if __name__ == '__main__':
     print(train_annotations['subject'].unique())
     val_annotations = pd.read_csv(val_path)
     print(val_annotations['subject'].unique())
-    train_emg_gen = EmgImageGenerator(train_annotations, 16, num_imfs=4, is_debug=True)
-    val_emg_gen = EmgImageGenerator(val_annotations, 16, num_imfs=4, is_debug=True)
+    train_emg_gen = EmgImageGenerator(train_annotations, 16, num_imfs=4, is_debug=False)
+    val_emg_gen = EmgImageGenerator(val_annotations, 16, num_imfs=4, is_debug=False)
     for i, d in train_emg_gen.train_generator():
         print(i)
+

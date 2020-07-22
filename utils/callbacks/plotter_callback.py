@@ -57,10 +57,15 @@ class PlotterCallback(Callback):
         if summary_path_dir doesnt exist create dir call write_sumamry
         """
         self.graph_path = self.summary_path.parents[0].joinpath('graphs').resolve()
+        self.model_summary = self.summary_path.parents[0].joinpath('model.txt').resolve()
         if not self.graph_path.exists():
             self.graph_path.mkdir(parents=True)
         if not self.summary_path.exists():
             self.save_summary({})
+        if self.model is not None:
+            with open(self.model_summary, 'w') as f:
+                # Pass the file handle in as a lambda function to make it callable
+                self.model.summary(print_fn=lambda x: f.write(x + '\n'))
 
     @classmethod
     def load_summary(cls, summary_path):
