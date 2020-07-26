@@ -24,18 +24,21 @@ def get_shifted_fft_and_frequency(sampling_frequency, signal):
 
 def rms(signal, kernel_length=201):
     kernel = np.ones(kernel_length) / kernel_length
-    rmsed = np.convolve(signal, kernel)
+    rmsed = np.convolve(signal, kernel, 'same')
     return rmsed
 
+
+nearest_power_2 = 12
+
 def my_resample(signal):
-    nearest_power_2 = int(np.ceil(np.log2(len(signal))))
+    #nearest_power_2 = int(np.ceil(np.log2(len(signal))))
     resample_to = 2 ** nearest_power_2
     resampled = resample(signal, resample_to)
     return resampled
 
 if __name__ == '__main__':
     emd_csv_path = Path(__file__, '..', 'files', 'emd_annotations.csv')
-    graph_path = Path(__file__).joinpath('..', 'files', 'validate', 'resample')
+    graph_path = Path(__file__).joinpath('..', 'files', 'validate', f'resample_to_{2 ** nearest_power_2}')
     df = pd.read_csv(emd_csv_path)
     num_subjects_gen = df['subject'].unique().tolist()
     num_signals_gen = df['signal_num'].unique().tolist()
@@ -54,11 +57,10 @@ if __name__ == '__main__':
                     path.mkdir(parents=True)
                 cols = channel_cols_dict[f'channel_{channel}']
                 subject_path = path.joinpath(f'signal_{signal}.png').resolve()
-                resampled_subject_path = path.joinpath(f'resampled_signal_{signal}.png').resolve()
+                resampled_subject_path = path.joinpath(f'resampled_to_{2**nearest_power_2}_signal_{signal}.png').resolve()
                 if resampled_subject_path.exists() and subject_path.exists():
                     continue
-                f, ax = plt.subplots(4, 2)
-                f1, ax1 = plt.subplots(4, 2)
+                f, ax = plt.subplots(4, 4)
                 for i in range(4):
                     imf = subject_df[cols[i]].values
                     rms_imf = rms(imf)
@@ -68,9 +70,9 @@ if __name__ == '__main__':
 
                     ax[i, 0].plot(rms_imf)
                     ax[i, 1].plot(time_frequency, abs_dft)
-                    plt.savefig(subject_path)
 
-                    ax1[i,0].plot(resampled)
-                    ax1[i, 1].plot(time_frequency_rms, abs_dft_rms)
-                    plt.savefig(resampled_subject_path)
-                    plt.close()
+
+                    ax[i,2].plot(resampled)
+                    ax[i, 3].plot(time_frequency_rms, abs_dft_rms)
+                f.savefig(subject_path)
+                plt.close()
