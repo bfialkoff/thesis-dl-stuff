@@ -61,7 +61,7 @@ def _get_cpu_model(input_size=None, activation=None, initial_weights=None, is_co
         loss = keras.losses.mean_squared_error
         print('mse')
     model.compile(loss=loss,
-                  optimizer=keras.optimizers.SGD(1e-5)
+                  optimizer=keras.optimizers.SGD(1e-3)
                   )
     if initial_weights:
         model.load_weights(initial_weights)
@@ -76,11 +76,16 @@ def get_cpu_model(input_size=None, activation=None, initial_weights=None, is_cor
     else:
         loss = keras.losses.mean_squared_error
         print('mse')
-    model.compile(loss=loss,
-                  optimizer=keras.optimizers.SGD(1e-5)
-                  )
+
+    if num_gpus > 1:
+        model = keras.utils.multi_gpu_utils.multi_gpu_model(model, gpus=num_gpus)
+
     if initial_weights:
         model.load_weights(initial_weights)
+
+    model.compile(loss=loss,
+                  optimizer=keras.optimizers.SGD(1e-4)
+                  )
     return model
 
 num_gpus = len(K.tensorflow_backend._get_available_gpus())
@@ -107,16 +112,17 @@ if __name__ == '__main__':
 
 
     date_id = datetime.now().strftime('%Y%m%d%H%M')
-    #date_id ='202007192001'
-    experiment_dir = Path(__file__, '..', 'files', 'deep_learning', date_id).resolve()
-    initial_weights = None
-    #initial_weights = experiment_dir.joinpath('weights', '82.hdf5').resolve()
+    #date_id ='202007221536'
+    experiment_dir = Path('/media/adam/e46d6141-876f-4b0c-90da-9e9e217986f2/betzalel_personal/').joinpath('files', 'deep_learning', date_id).resolve()
+
+    initial_epoch = 0
+    initial_weights = experiment_dir.joinpath('weights', f'{initial_epoch}.hdf5').resolve()
     #initial_weights = initial_weights if num_gpus else None
     activation = None
 
     summary_path = experiment_dir.joinpath('summaries', 'summary.json')
-    batch_size = 16
-    input_size = (224, 224, 3) if num_gpus else [None]
+    batch_size = 32
+    input_size = (224, 224, 3) if (num_gpus and False) else [None]
     is_corruption = False
 
     train_emg_gen = EmgImageGenerator(train_annotations.copy(), batch_size, scaler=None, input_size=input_size[0], num_imfs=num_imfs)
@@ -139,7 +145,7 @@ if __name__ == '__main__':
     callbacks = [p, model_checkpoint]
     model.fit_generator(train_gen,
                         steps_per_epoch=train_emg_gen.num_samples // train_emg_gen.batch_size,
-                        epochs=2000,
+                        epochs=100000,
                         callbacks=callbacks,
                         verbose=1,
-                        initial_epoch=0)
+                        initial_epoch=initial_epoch)
