@@ -1,5 +1,6 @@
 from pathlib import Path
 from datetime import datetime
+import tensorflow as tf
 import keras
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Flatten, BatchNormalization, Conv3D, MaxPooling3D
@@ -21,7 +22,12 @@ from utils.preprocessing.data_preprocessor import DataPreprocessor
 num_imfs = 4
 window_sample_length = 256
 
-
+def atanh(delta=1e-3):
+    def _atanh(x):
+        max_abs = tf.math.reduce_max(tf.math.abs(x)) + delta
+        x = tf.div(x, max_abs)
+        return tf.math.atanh(x)
+    return _atanh
 
 def _get_cpu_model(input_size=None, activation=None, initial_weights=None, is_corruption=False):
     model = Sequential()
@@ -69,7 +75,7 @@ def _get_cpu_model(input_size=None, activation=None, initial_weights=None, is_co
 
 def get_cpu_model(input_size=None, activation=None, initial_weights=None, is_corruption=False):
     input_shape = (window_sample_length, 8, 8, num_imfs)
-    model = Resnet3DBuilder.build_resnet_50((window_sample_length, 8, 8, num_imfs), 1)
+    model = Resnet3DBuilder.build_resnet_50(input_shape=input_shape, num_outputs=1, activation=activation)
     if is_corruption:
         loss = keras.losses.binary_crossentropy
         print('bce')
@@ -112,7 +118,7 @@ if __name__ == '__main__':
     initial_weights = None
     #initial_weights = experiment_dir.joinpath('weights', '82.hdf5').resolve()
     #initial_weights = initial_weights if num_gpus else None
-    activation = None
+    activation = atanh()
 
     summary_path = experiment_dir.joinpath('summaries', 'summary.json')
     batch_size = 16

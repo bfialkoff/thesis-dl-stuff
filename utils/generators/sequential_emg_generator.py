@@ -69,6 +69,7 @@ def window_rms(signal, window_size=400):
 def resample(signal):
     nearest_power_2 = int(np.ceil(np.log2(len(signal))))
     resample_to = 2 ** nearest_power_2
+    residual = resample_to - len(signal)
     resampled = sc_resample(signal, resample_to)
     return resampled
 
@@ -115,6 +116,8 @@ class EmgImageGenerator:
         shuffle(self.index_list)
 
     def process_annotations(self, raw_annotations):
+        # fixme instead of resampling handle the residual window separately
+        #  the solution for the final window will be to incorporate the missing portion from the preceding window
         annotations = raw_annotations.fillna(0)
         annotations = annotations.drop(columns=['is_valid'], axis=1)
         annotations = annotations.set_index(self.id_cols)
@@ -123,12 +126,22 @@ class EmgImageGenerator:
         start_seg_id = 0
         for subject, signal in annotations.index.unique():
             rmsed = multi_rms(annotations.loc[(subject, signal), self.value_cols].values)
-            resampled = multi_resample(rmsed)
-            res = np.zeros((resampled.shape[0], len(data_cols)))
+            # calculate remainder and dst size
+
+            residual = len(rmsed) % self.signal_window_size
+            num_windows = len(rmsed) // self.signal_window_size
+            whole_part = rmsed[:num_windows * self.signal_window_size]
+
+            if residual:
+                num_windows += 1
+                prepend = rmsed[-self.signal_window_size:]
+                whole_part = np.concatenate((whole_part, prepend))
+            res_len = self.signal_window_size * num_windows
+            res = np.zeros((res_len, len(data_cols)))
             segments = start_seg_id + np.arange(0, len(res)) // self.signal_window_size
             res[:, 0:2] = subject, signal
             res[:, 2] = segments
-            res[:, 3:] = resampled
+            res[:, 3:] = whole_part
             results.append(res)
             start_seg_id = segments.max() + 1
 
