@@ -123,24 +123,7 @@ class EmgImageGenerator:
                             batch_images[start_index:end_index, r, c, i] = curr_res
                         else:
                             batch_images[start_index:end_index, r, c, i] = 0
-        #print(total_len, len(raw_annotations))
-        """
-        batch_outputs = np.convolve(raw_annotations[self.output_column], rms_kernel_3d)
-        for i, (imf, channel_cols) in enumerate(self.imf_cols_dict.items()):
-            inputs = raw_annotations[channel_cols].values
-            # this row makes the voltage difference proportional to the channel (ai-aj) * ai
-            # input_images = input_images * np.expand_dims(batch_rows[channel_cols], 2)
-            input_images = permute_axes_subtract(inputs)
-            for r in range(self.num_channels):
-                for c in range(self.num_channels):
-                    if r != c: # on the diagonal the entire value is zero, no need to waste computation
-                        curr_signal = input_images[:, r, c]
-                        curr_res = np.convolve(curr_signal, rms_kernel_3d)
-                        batch_images[:, r, c, i] = curr_res
-                    else:
-                        batch_images[:, r, c, i] = 0
-        
-        """
+
         if self.scaler is None:
             self.scaler = MinMaxScaler(feature_range=(0, 1))
             self.scaler.fit(batch_outputs.reshape(-1, 1))

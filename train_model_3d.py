@@ -76,6 +76,7 @@ def _get_cpu_model(input_size=None, activation=None, initial_weights=None, is_co
 def get_cpu_model(input_size=None, activation=None, initial_weights=None, is_corruption=False):
     input_shape = (window_sample_length, 8, 8, num_imfs)
     model = Resnet3DBuilder.build_resnet_50(input_shape=input_shape, num_outputs=1, activation=activation)
+
     if is_corruption:
         loss = keras.losses.binary_crossentropy
         print('bce')
@@ -115,15 +116,16 @@ if __name__ == '__main__':
     val_annotations = pd.read_csv(val_path)
     train_annotations = train_annotations.fillna(0)
     val_annotations = val_annotations.fillna(0)
-
+    ''.strip()
 
     date_id = datetime.now().strftime('%Y%m%d%H%M')
     #date_id ='202007221536'
-    experiment_dir = Path('/media/adam/e46d6141-876f-4b0c-90da-9e9e217986f2/betzalel_personal/').joinpath('files', 'deep_learning', date_id).resolve()
+    experiment_dir = Path(__file__, '..').joinpath('files', 'deep_learning', date_id).resolve()
 
     initial_epoch = 0
-    initial_weights = None
+    #initial_weights = experiment_dir.joinpath('weights', f'{initial_epoch}.hdf5').resolve()
     #initial_weights = initial_weights if num_gpus else None
+    initial_weights = None
     activation = None
 
     summary_path = experiment_dir.joinpath('summaries', 'summary.json')

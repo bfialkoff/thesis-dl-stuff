@@ -113,7 +113,6 @@ class EmgImageGenerator:
         self.steps = self.num_samples // self.batch_size
         self.input_shape = (self.batch_size, self.signal_window_size, self.num_channels, self.num_channels, self.num_imfs)
         self.index_list = list(range(self.num_samples))
-        shuffle(self.index_list)
 
     def process_annotations(self, raw_annotations):
         # fixme instead of resampling handle the residual window separately

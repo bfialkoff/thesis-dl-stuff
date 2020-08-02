@@ -23,6 +23,10 @@ def _bn_relu(input):
     norm = BatchNormalization(axis=CHANNEL_AXIS)(input)
     #return Activation("relu")(norm)
     return Activation("relu")(input)
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1dc7bbc90d03b3c4fc2866987c44247de2a2949e
 
 
 def _conv_bn_relu3D(**conv_params):
