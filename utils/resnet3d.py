@@ -21,7 +21,8 @@ CHANNEL_AXIS = 4
 def _bn_relu(input):
     """Helper to build a BN -> relu block (by @raghakot)."""
     norm = BatchNormalization(axis=CHANNEL_AXIS)(input)
-    return Activation("relu")(norm)
+    #return Activation("relu")(norm)
+    return Activation("relu")(input)
 
 
 def _conv_bn_relu3D(**conv_params):

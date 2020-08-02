@@ -122,9 +122,9 @@ if __name__ == '__main__':
     experiment_dir = Path('/media/adam/e46d6141-876f-4b0c-90da-9e9e217986f2/betzalel_personal/').joinpath('files', 'deep_learning', date_id).resolve()
 
     initial_epoch = 0
-    initial_weights = experiment_dir.joinpath('weights', f'{initial_epoch}.hdf5').resolve()
+    initial_weights = None
     #initial_weights = initial_weights if num_gpus else None
-    activation = atanh()
+    activation = None
 
     summary_path = experiment_dir.joinpath('summaries', 'summary.json')
     batch_size = 32

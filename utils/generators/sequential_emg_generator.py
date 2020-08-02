@@ -189,7 +189,8 @@ class EmgImageGenerator:
             cv2.imwrite(f_name, img)
 
     def get_input_outputs(self, batch_rows, debug_tag=''):
-        batch_images = np.zeros(self.input_shape)
+        input_shape = (len(batch_rows) // self.signal_window_size, *self.input_shape[1:])
+        batch_images = np.zeros(input_shape)
         batch_outputs = batch_rows[self.output_column].reset_index().groupby('segment_num').mean().values.reshape(-1)
         for i, (imf, channel_cols) in enumerate(self.imf_cols_dict.items()):
             inputs = batch_rows[channel_cols].values
@@ -197,7 +198,7 @@ class EmgImageGenerator:
 
             # this row makes the voltage difference proportional to the channel (ai-aj) * ai
             # input_images = input_images * np.expand_dims(batch_rows[channel_cols], 2)
-            input_images = input_images.reshape(self.input_shape[:4])
+            input_images = input_images.reshape(input_shape[:4])
             batch_images[:,:, :, :, i] = input_images
         if self.input_size:
             self.resize_batch(batch_images)

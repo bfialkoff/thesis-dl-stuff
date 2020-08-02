@@ -11,6 +11,7 @@ import matplotlib
 #matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from keras.callbacks import Callback
+import keras.backend as K
 import numpy as np
 from tqdm import tqdm
 
@@ -64,8 +65,10 @@ class PlotterCallback(Callback):
             self.save_summary({})
         if self.model is not None:
             with open(self.model_summary, 'w') as f:
-                # Pass the file handle in as a lambda function to make it callable
-                self.model.summary(print_fn=lambda x: f.write(x + '\n'))
+                if len(K.tensorflow_backend._get_available_gpus()) > 1:
+                    self.model.layers[-2].summary(print_fn=lambda x: f.write(x + '\n'))
+                else:
+                    self.model.summary(print_fn=lambda x: f.write(x + '\n'))
 
     @classmethod
     def load_summary(cls, summary_path):
@@ -153,10 +156,11 @@ class PlotterCallback(Callback):
             if i == gen_obj.steps:
                 break
             start_index = i * gen_obj.batch_size
-            end_index = start_index + gen_obj.batch_size
+            end_index = start_index + len(data)
             pred = self.model.predict_on_batch(data)
             y_true[start_index:end_index] = labels
             y_pred[start_index:end_index] = pred.reshape(-1)
+        print(y_true, y_pred)
         return y_true, y_pred
 
     @classmethod
