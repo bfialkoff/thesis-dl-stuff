@@ -7,5 +7,5 @@ opencv-python
 scikit-learn
 tqdm
 keras==2.2.4
-tensorflow-gpu==1.13.1
+tensorflow-gpu==2.12.0
 image-classifiers==0.2.2
